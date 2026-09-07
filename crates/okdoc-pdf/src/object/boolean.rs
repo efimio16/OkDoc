@@ -21,14 +21,14 @@ impl Parseable for PdfBoolean {
     }
 
     fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
-        const TRUE: &str = "true";
-        const FALSE: &str = "false";
+        const KW_TRUE: &str = "true";
+        const KW_FALSE: &str = "false";
         
         let mut value = None;
         
         let chunk = input.fill_buf()?;
 
-        if let None = value {
+        if value.is_none() {
             let first_char = chunk[0];
             match first_char {
                 b't' => value = Some(true),
@@ -39,11 +39,11 @@ impl Parseable for PdfBoolean {
 
         match value {
             Some(true) => {
-                input.read_keyword(TRUE)?;
+                input.read_keyword(KW_TRUE)?;
                 Ok(Self(true))
             }
             Some(false) => {
-                input.read_keyword(FALSE)?;
+                input.read_keyword(KW_FALSE)?;
                 Ok(Self(false))
             }
             _ => unreachable!(),
@@ -53,11 +53,27 @@ impl Parseable for PdfBoolean {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use super::*;
+
+    fn assert_slice_and_value(slice: &[u8], value: PdfBoolean) {
+        assert_eq!(PdfBoolean::from_bytes(slice).unwrap(), value);
+    }
+
+    fn assert_err(slice: &[u8]) {
+        assert_matches!(PdfBoolean::from_bytes(slice), Err(_));
+    }
 
     #[test]
     fn test_boolean() {
-        assert_eq!(PdfBoolean::from_bytes(b"true" as &[u8]).unwrap().0, true);
-        assert_eq!(PdfBoolean::from_bytes(b"false" as &[u8]).unwrap().0, false);
+        assert_slice_and_value(b"true", PdfBoolean(true));
+        assert_slice_and_value(b"false", PdfBoolean(false));
+
+        assert_slice_and_value(b"true lorem ipsum", PdfBoolean(true));
+        assert_slice_and_value(b"false lorem ipsum", PdfBoolean(false));
+
+        assert_err(b"trua");
+        assert_err(b" false");
+        assert_err(b"fal se");
     }
 }
