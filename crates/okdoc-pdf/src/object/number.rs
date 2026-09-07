@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{self, BufRead};
 
 use crate::{error::PdfError, parser::Parseable};
 
@@ -32,8 +32,8 @@ impl Default for PdfNumber {
 }
 
 impl Parseable for PdfNumber {
-    fn matches_from_start(bytes: &[u8]) -> usize {
-        bytes.len()
+    fn matches_from_start(_: &[u8]) -> usize {
+        todo!("decide if this function is still needed")
     }
 
     fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
@@ -53,7 +53,7 @@ impl Parseable for PdfNumber {
                 return if met_digit {
                     Ok(value)
                 } else {
-                    Err(PdfError::Parse("expected at least one digit".to_string()))
+                    Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()))
                 }
             }
 
@@ -115,16 +115,8 @@ impl Parseable for PdfNumber {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
+    use crate::parser::test_utils::{assert_err, assert_slice_and_value};
     use super::*;
-
-    fn assert_slice_and_value(slice: &[u8], value: PdfNumber) {
-        assert_eq!(PdfNumber::from_bytes(slice).unwrap(), value);
-    }
-
-    fn assert_err(slice: &[u8]) {
-        assert_matches!(PdfNumber::from_bytes(slice), Err(_));
-    }
 
     #[test]
     fn test_number() {
@@ -136,12 +128,12 @@ mod tests {
         assert_slice_and_value(b"+1111.1111", PdfNumber::Real(1111.1111));  // Embedded point
         assert_slice_and_value(b"100.", PdfNumber::Real(100.));             // Trailing point
 
-        assert_err(b"-");
-        assert_err(b"+");
-        assert_err(b".");
-        assert_err(b"+.");
-        assert_err(b"-.");
-        assert_err(b"-0..1");
-        assert_err(b"1.0.3");
+        assert_err::<PdfNumber>(b"-");
+        assert_err::<PdfNumber>(b"+");
+        assert_err::<PdfNumber>(b".");
+        assert_err::<PdfNumber>(b"+.");
+        assert_err::<PdfNumber>(b"-.");
+        assert_err::<PdfNumber>(b"-0..1");
+        assert_err::<PdfNumber>(b"1.0.3");
     }
 }

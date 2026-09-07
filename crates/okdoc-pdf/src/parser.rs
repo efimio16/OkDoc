@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{self, BufRead};
 
 use crate::error::PdfError;
 
@@ -23,6 +23,9 @@ impl<T: BufRead> PdfInput for T {
         loop {
             let chunk = self.fill_buf()?;
             let chunk_len = chunk.len();
+            if chunk_len == 0 {
+                return Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()));
+            }
             
             let amt = chunk_len.min(kw_len - i);
 
@@ -44,5 +47,19 @@ impl<T: BufRead> PdfInput for T {
                 return Ok(());
             }
         }
+    }
+}
+
+#[cfg(test)]
+pub mod test_utils {
+    use std::{assert_matches, fmt::Debug};
+    use super::*;
+
+    pub fn assert_slice_and_value<T: Parseable + Debug + PartialEq>(slice: &[u8], value: T) {
+        assert_eq!(T::from_bytes(slice).unwrap(), value);
+    }
+
+    pub fn assert_err<T: Parseable + Debug>(slice: &[u8]) {
+        assert_matches!(T::from_bytes(slice), Err(_));
     }
 }

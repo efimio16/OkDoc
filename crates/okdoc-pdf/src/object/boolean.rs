@@ -1,4 +1,4 @@
-use std::io::BufRead;
+use std::io::{self, BufRead};
 
 use crate::{error::PdfError, parser::{Parseable, PdfInput}};
 
@@ -6,7 +6,7 @@ use crate::{error::PdfError, parser::{Parseable, PdfInput}};
 pub struct PdfBoolean(pub bool);
 
 impl Parseable for PdfBoolean {
-    fn matches_from_start(bytes: &[u8]) -> usize {
+    fn matches_from_start(_: &[u8]) -> usize {
         // const TRUE: &[u8] = b"true";
         // const FALSE: &[u8] = b"false";
 
@@ -17,7 +17,7 @@ impl Parseable for PdfBoolean {
         //     }
         // }
 
-        bytes.len()
+        todo!("decide if this function is still needed")
     }
 
     fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
@@ -27,6 +27,9 @@ impl Parseable for PdfBoolean {
         let mut value = None;
         
         let chunk = input.fill_buf()?;
+        if chunk.len() == 0 {
+            return Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()));
+        }
 
         if value.is_none() {
             let first_char = chunk[0];
@@ -53,16 +56,8 @@ impl Parseable for PdfBoolean {
 
 #[cfg(test)]
 mod tests {
-    use std::assert_matches;
+    use crate::parser::test_utils::{assert_err, assert_slice_and_value};
     use super::*;
-
-    fn assert_slice_and_value(slice: &[u8], value: PdfBoolean) {
-        assert_eq!(PdfBoolean::from_bytes(slice).unwrap(), value);
-    }
-
-    fn assert_err(slice: &[u8]) {
-        assert_matches!(PdfBoolean::from_bytes(slice), Err(_));
-    }
 
     #[test]
     fn test_boolean() {
@@ -72,8 +67,9 @@ mod tests {
         assert_slice_and_value(b"true lorem ipsum", PdfBoolean(true));
         assert_slice_and_value(b"false lorem ipsum", PdfBoolean(false));
 
-        assert_err(b"trua");
-        assert_err(b" false");
-        assert_err(b"fal se");
+        assert_err::<PdfBoolean>(b"trua");
+        assert_err::<PdfBoolean>(b" false");
+        assert_err::<PdfBoolean>(b"fals");
+        assert_err::<PdfBoolean>(b"tru");
     }
 }
