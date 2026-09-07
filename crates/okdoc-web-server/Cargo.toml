@@ -1,0 +1,8 @@
+[package]
+name = "okdoc-web-server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+actix-files = "0.7.0"
+actix-web = "4.15.0"
