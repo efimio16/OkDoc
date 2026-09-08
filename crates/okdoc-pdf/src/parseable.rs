@@ -1,14 +1,15 @@
 use std::io::{self, BufRead};
-
 use crate::error::PdfError;
 
+
+/// Adds ability to decode objects from bytes.
+/// It consists of 2 methods: `matches` and `parse_from`
 pub trait Parseable
 where Self: Sized {
-    /// Requires at least 20 bytes.
-    /// Returns how many bytes from the start of the slice really matches.
-    fn matches_from_start(bytes: &[u8]) -> usize;
-    /// Reads bytes, parses them and finally returns the object itself.
-    fn from_bytes<T: BufRead>(input: T) -> Result<Self, PdfError>;
+    /// Returns how many bytes from the beginning of the slice matches with object's structure.
+    fn matches(bytes: &[u8]) -> usize;
+    /// Parses the object itself from bytes.
+    fn parse_from<T: BufRead>(input: T) -> Result<Self, PdfError>;
 }
 
 pub trait PdfInput {
@@ -56,10 +57,10 @@ pub mod test_utils {
     use super::*;
 
     pub fn assert_slice_and_value<T: Parseable + Debug + PartialEq>(slice: &[u8], value: T) {
-        assert_eq!(T::from_bytes(slice).unwrap(), value);
+        assert_eq!(T::parse_from(slice).unwrap(), value);
     }
 
     pub fn assert_err<T: Parseable + Debug>(slice: &[u8]) {
-        assert_matches!(T::from_bytes(slice), Err(_));
+        assert_matches!(T::parse_from(slice), Err(_));
     }
 }

@@ -1,6 +1,6 @@
 use std::io::{self, BufRead};
 
-use crate::{error::PdfError, parser::Parseable};
+use crate::{error::PdfError, parseable::Parseable};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum PdfNumber {
@@ -32,11 +32,11 @@ impl Default for PdfNumber {
 }
 
 impl Parseable for PdfNumber {
-    fn matches_from_start(_: &[u8]) -> usize {
+    fn matches(_: &[u8]) -> usize {
         todo!("decide if this function is still needed")
     }
 
-    fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
+    fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
         let mut sign = 1;
         let mut sign_set = false;
         
@@ -115,7 +115,7 @@ impl Parseable for PdfNumber {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
     use super::*;
 
     #[test]

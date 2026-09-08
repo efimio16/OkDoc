@@ -1,6 +1,7 @@
 use std::io::{self, BufRead};
+use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::{error::PdfError, parser::Parseable};
+use crate::{error::PdfError, parseable::Parseable};
 
 #[derive(Default)]
 enum State {
@@ -10,26 +11,31 @@ enum State {
     EscapeSequence { digits: u8, character: u8 },
 }
 
+/// A name object is an atomic symbol uniquely defined by a sequence of any
+/// characters (8-bit values) except null (character code 0).
+/// 
 /// ## Syntax
 /// `/Name1`
+// TODO: make a byte interning
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct PdfName(pub String);
+pub struct PdfName(pub Bytes);
 
 impl Parseable for PdfName {
-    fn matches_from_start(_: &[u8]) -> usize {
+    fn matches(_: &[u8]) -> usize {
         todo!("decide if this function is still needed")
     }
 
-    fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
-        let mut value = String::new();
+    fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
+        const MAX_NAME_LENGTH: usize = 127;
+        let mut value = BytesMut::new();
         let mut state = State::default();
 
         loop {
-            let mut amt = 0;
+            let mut i = 0;
             let chunk = input.fill_buf()?;
             if chunk.len() == 0 {
                 return match state {
-                    State::RegularChar => Ok(Self(value)),
+                    State::RegularChar => Ok(Self(value.freeze())),
                     _ => Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into())),
                 }
             }
@@ -44,12 +50,18 @@ impl Parseable for PdfName {
                     }
                     State::RegularChar => {
                         match b {
-                            // Slash or PDF whitespace characters
-                            b'/' | 0 | 9 | 10 | 12 | 13 | 32 => return Ok(Self(value)),
+                            // PDF whitespace/delimiter characters
+                            0 | 9 | 10 | 12 | 13 | 32 |
+                            b'(' | b')' | b'<' | b'>' | b'[' | b']' | b'{' | b'}' | b'/' | b'%' => return Ok(Self(value.freeze())),
                             // Escape sequence like `#20`
                             b'#' => state = State::EscapeSequence { digits: 0, character: 0 },
                             // Regular character
-                            b'!'..=b'~' => value.push(*b as char),
+                            b'!'..=b'~' => {
+                                value.put_u8(*b);
+                                if value.len() == MAX_NAME_LENGTH {
+                                    return Err(PdfError::Parse("name too long".into()))
+                                }
+                            }
                             // Other
                             _ => return Err(PdfError::Parse(format!("invalid char: {} (0x{:x})", *b as char, b))),
                         }
@@ -64,22 +76,25 @@ impl Parseable for PdfName {
                         
                         *digits += 1;
                         if *digits == 2 {
-                            value.push(*character as char);
+                            value.put_u8(*character);
+                            if value.len() == MAX_NAME_LENGTH {
+                                return Err(PdfError::Parse("name too long".into()))
+                            }
                             state = State::RegularChar;
                         }
                     }
                 }
-                amt += 1;
+                i += 1;
             }
 
-            input.consume(amt);
+            input.consume(i);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
     use super::*;
 
     #[test]
@@ -96,6 +111,7 @@ mod tests {
         assert_slice_and_value(b"/paired#28#29parentheses", PdfName("paired()parentheses".into()));
         assert_slice_and_value(b"/The_Key_of_F#23_Minor", PdfName("The_Key_of_F#_Minor".into()));
         assert_slice_and_value(b"/A#42", PdfName("AB".into()));
+        assert_slice_and_value(b"/Delimited%im comment", PdfName("Delimited".into()));
 
         assert_err::<PdfName>(b"");
         assert_err::<PdfName>(b"/I'm_incompleted_#1");

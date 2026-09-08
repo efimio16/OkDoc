@@ -1,12 +1,12 @@
 use std::io::{self, BufRead};
 
-use crate::{error::PdfError, parser::{Parseable, PdfInput}};
+use crate::{error::PdfError, parseable::{Parseable, PdfInput}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PdfBoolean(pub bool);
 
 impl Parseable for PdfBoolean {
-    fn matches_from_start(_: &[u8]) -> usize {
+    fn matches(_: &[u8]) -> usize {
         // const TRUE: &[u8] = b"true";
         // const FALSE: &[u8] = b"false";
 
@@ -20,7 +20,7 @@ impl Parseable for PdfBoolean {
         todo!("decide if this function is still needed")
     }
 
-    fn from_bytes<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
+    fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
         const KW_TRUE: &str = "true";
         const KW_FALSE: &str = "false";
         
@@ -56,7 +56,7 @@ impl Parseable for PdfBoolean {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
     use super::*;
 
     #[test]
