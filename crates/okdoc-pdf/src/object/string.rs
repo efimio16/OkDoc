@@ -1,10 +1,19 @@
 use std::io::{BufRead, ErrorKind};
 
 use bytes::{BufMut, Bytes, BytesMut};
-use faster_hex::hex_decode;
-use memchr::{memchr_iter, memchr3_iter};
+use memchr::{memchr, memchr3_iter};
 
 use crate::{error::PdfError, parseable::Parseable};
+
+#[inline(always)]
+fn from_hex(v: u8) -> u8 {
+    match v {
+        b'0'..=b'9' => v - b'0',
+        b'A'..=b'F' => v - b'A' + 10,
+        b'a'..=b'f' => v - b'a' + 10,
+        _ => 0,
+    }
+}
 
 /// A string object in PDF.
 /// 
@@ -15,6 +24,7 @@ use crate::{error::PdfError, parseable::Parseable};
 /// Literals: `(Strings may contain balanced parentheses ( ) and special characters (*!&}^% and so on).)`
 /// 
 /// Hexadecimals: `<4E6F762073686D6F7A206B6120706F702E>`
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct PdfString(pub Bytes);
 
 impl PdfString {
@@ -44,16 +54,19 @@ impl PdfString {
             while i < chunk.len() {
                 match &mut state {
                     State::CopyBytes => {
-                        while let Some(j) = memchr3_iter(b'(', b')', b'\\', &chunk[i..]).next() {
+                        if let Some(j) = memchr3_iter(b'(', b')', b'\\', &chunk[i..]).next() {
                             value.put(&chunk[i..i+j]);
-                            i += j + 1;
                             match chunk[i+j] {
-                                b'(' => parentheses_depth += 1,
+                                b'(' => {
+                                    value.put_u8(b'(');
+                                    parentheses_depth += 1;
+                                }
                                 b')' => {
                                     if parentheses_depth == 0 {
                                         input.consume(i);
                                         return Ok(Self(value.freeze()))
                                     }
+                                    value.put_u8(b')');
                                     parentheses_depth -= 1;
                                 }
                                 b'\\' => {
@@ -61,9 +74,11 @@ impl PdfString {
                                 }
                                 _ => unreachable!(),
                             }
+                            i += j + 1;
+                        } else {
+                            value.put(&chunk[i..]);
+                            i = chunk.len();
                         }
-                        value.put(&chunk[i..]);
-                        i = chunk.len();
                     }
                     State::EscapeChar => {
                         let b = chunk[i];
@@ -95,12 +110,18 @@ impl PdfString {
                                 *sequence = *sequence * 8 + (b - b'0') as u16;
                                 *digits_count += 1;
                                 if *digits_count == 3 {
+                                    if *sequence >> 8 > 0 {
+                                        value.put_u8((*sequence >> 8) as u8);
+                                    }
+                                    value.put_u8((*sequence & 0xff) as u8);
                                     state = State::CopyBytes;
                                 }
                             }
                             _ => {
-                                value.put_u8((*sequence >> 8) as u8);
-                                value.put_u8((*sequence & 8) as u8);
+                                if *sequence >> 8 > 0 {
+                                    value.put_u8((*sequence >> 8) as u8);
+                                }
+                                value.put_u8((*sequence & 0xff) as u8);
                                 state = State::CopyBytes;
                                 continue;
                             }
@@ -121,50 +142,44 @@ impl PdfString {
         }
     }
     fn parse_hex_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
-        // macro_rules! parse_hex {
-        //     () => {
-                
-        //     };
-        // }
-
         let mut value = BytesMut::new();
         let mut remaining_byte = None;
         
         loop {
             let chunk = input.fill_buf()?;
-            if chunk.len() == 0 {
+            let chunk_len = chunk.len();
+            if chunk_len == 0 {
                 return Err(PdfError::Io(ErrorKind::UnexpectedEof.into()));
             }
             
-            while let Some(i) = memchr_iter(b'>', chunk).next() {
-                // parse hex
-                input.consume(i + 1);
-                return Ok(Self(value.freeze()));
-            }
+            let input_end = memchr(b'>', chunk).unwrap_or(chunk_len);
+            
             // parse hex
             let mut i = 0;
 
             if let Some(remaining_byte) = remaining_byte {
-                // let decoded_byte = hex * 16;
+                value.put_u8(from_hex(remaining_byte) << 4 | from_hex(chunk[0]));
+                i += 1;
             }
-            
-            while i < chunk.len() {
-                let mut out = [0u8; 1024];
-                let input_len = (out.len() * 2).min(chunk.len() - i) / 2 * 2;
-                
-                // hex_decode(&chunk[i..i+input_len], &mut out)?;
 
-                value.put(&out[..input_len / 2]);
-                i += input_len;
-                
-                if chunk.len() - i == 1 {
-                    remaining_byte = Some(chunk[i]);
-                    i += 1;
-                }
+            let pairs_end = if (input_end - i) % 2 == 1 {
+                remaining_byte = Some(chunk[input_end - 1]);
+                input_end - 1
+            } else {
+                input_end
+            };
+            
+            while i < pairs_end {
+                value.put_u8(from_hex(chunk[i]) << 4 | from_hex(chunk[i + 1]));
+                i += 2;
             }
             
-            let chunk_len = chunk.len();
-            input.consume(chunk_len);
+            input.consume(i);
+
+            if input_end < chunk_len {
+                input.consume(1);
+                return Ok(Self(value.freeze()))
+            }
         }
     }
 }
@@ -191,5 +206,47 @@ impl Parseable for PdfString {
             b'<' => Self::parse_hex_from(input),
             _ => return Err(PdfError::Parse(format!("unexpected first character: {}", first_byte as char))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
+    use super::*;
+
+    fn test_parsing(input: &[u8], string: &'static [u8]) {
+        assert_slice_and_value(input, PdfString(Bytes::from_static(string)));
+    }
+    
+    #[test]
+    fn test_literal_strings() {
+        test_parsing(b"(This is a string)", b"This is a string");
+        test_parsing(
+            b"(Strings may contain newlines\nand such.)",
+            b"Strings may contain newlines\nand such."
+        );
+        test_parsing(
+            b"(Strings may contain balanced parentheses ( ) and special characters (*!&}^% and so on).)",
+            b"Strings may contain balanced parentheses ( ) and special characters (*!&}^% and so on)."
+        );
+        test_parsing(
+            b"(These \\\ntwo strings \\\nare the same.)",
+            b"These two strings are the same."
+        );
+        test_parsing(
+            b"(This string contains \\245two octal characters\\307.)",
+            b"This string contains \xa5two octal characters\xc7."
+        );
+        test_parsing(b"(\\0053)", b"\x053");
+        test_parsing(b"(\\053)", b"+");
+        test_parsing(b"(\\53)", b"+");
+        assert_err::<PdfString>(b"");
+        assert_err::<PdfString>(b"(");
+        assert_err::<PdfString>(b"(\\a)");
+    }
+
+    #[test]
+    fn test_hex_strings() {
+        test_parsing(b"<48656C6C6F20776F726C64>", b"Hello world");
     }
 }
