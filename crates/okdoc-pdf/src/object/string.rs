@@ -63,7 +63,7 @@ impl PdfString {
                                 }
                                 b')' => {
                                     if parentheses_depth == 0 {
-                                        input.consume(i);
+                                        input.consume(i+j+1);
                                         return Ok(Self(value.freeze()))
                                     }
                                     value.put_u8(b')');
@@ -211,11 +211,11 @@ impl Parseable for PdfString {
 
 #[cfg(test)]
 mod tests {
-    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_parsing};
     use super::*;
 
     fn test_parsing(input: &[u8], string: &'static [u8]) {
-        assert_slice_and_value(input, PdfString(Bytes::from_static(string)));
+        assert_parsing(input, PdfString(Bytes::from_static(string)), b"");
     }
     
     #[test]

@@ -56,20 +56,20 @@ impl Parseable for PdfBoolean {
 
 #[cfg(test)]
 mod tests {
-    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_parsing};
     use super::*;
 
     #[test]
     fn test_boolean() {
-        assert_slice_and_value(b"true", PdfBoolean(true));
-        assert_slice_and_value(b"false", PdfBoolean(false));
+        assert_parsing(b"true", PdfBoolean(true), b"");
+        assert_parsing(b"false", PdfBoolean(false), b"");
 
-        assert_slice_and_value(b"true lorem ipsum", PdfBoolean(true));
-        assert_slice_and_value(b"false lorem ipsum", PdfBoolean(false));
+        assert_parsing(b"true lorem ipsum", PdfBoolean(true), b" lorem ipsum");
+        assert_parsing(b"false% A comment", PdfBoolean(false), b"% A comment");
 
         assert_err::<PdfBoolean>(b"trua");
         assert_err::<PdfBoolean>(b" false");
         assert_err::<PdfBoolean>(b"fals");
-        assert_err::<PdfBoolean>(b"tru");
+        assert_err::<PdfBoolean>(b"trueaeaeuau");
     }
 }

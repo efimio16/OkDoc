@@ -21,7 +21,7 @@ impl<T: BufRead> PdfInput for T {
         let mut i = 0;
         let kw_len = kw.len();
         
-        loop {
+        while i < kw_len {
             let chunk = self.fill_buf()?;
             let chunk_len = chunk.len();
             if chunk_len == 0 {
@@ -43,23 +43,33 @@ impl<T: BufRead> PdfInput for T {
 
             self.consume(amt);
             i += amt;
+        }
 
-            if i == kw_len {
-                return Ok(());
-            }
+        let last_chunk = self.fill_buf()?;
+
+        match last_chunk.get(0) {
+            Some(b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z') => Err(
+                PdfError::Parse("keyword should not be followed by any alphanumeric characters".into())
+            ),
+            _ => Ok(()),
         }
     }
 }
 
+/// Test helpers for parseable objects
 #[cfg(test)]
 pub mod test_utils {
     use std::{assert_matches, fmt::Debug};
     use super::*;
 
-    pub fn assert_slice_and_value<T: Parseable + Debug + PartialEq>(slice: &[u8], value: T) {
-        assert_eq!(T::parse_from(slice).unwrap(), value);
+    /// Parses the object from a slice and compares parsed result and
+    /// remaining (not consumed) part of the slice with expected ones
+    pub fn assert_parsing<T: Parseable + Debug + PartialEq>(mut slice: &[u8], value: T, rem: &[u8]) {
+        assert_eq!(T::parse_from(&mut slice).unwrap(), value);
+        assert_eq!(slice, rem);
     }
 
+    /// Tries to parse an object expecting an error from it
     pub fn assert_err<T: Parseable + Debug>(slice: &[u8]) {
         assert_matches!(T::parse_from(slice), Err(_));
     }

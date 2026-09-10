@@ -115,18 +115,18 @@ impl Parseable for PdfNumber {
 
 #[cfg(test)]
 mod tests {
-    use crate::parseable::test_utils::{assert_err, assert_slice_and_value};
+    use crate::parseable::test_utils::{assert_err, assert_parsing};
     use super::*;
 
     #[test]
     fn test_number() {
-        assert_slice_and_value(b"100", PdfNumber::Integer(100));            // A normal integer
-        assert_slice_and_value(b"+34567", PdfNumber::Integer(34567));       // Explicit positive sign
-        assert_slice_and_value(b"-7", PdfNumber::Integer(-7));              // Explicit negative sign
+        assert_parsing(b"100", PdfNumber::Integer(100), b"");                               // A normal integer
+        assert_parsing(b"+34567", PdfNumber::Integer(34567), b"");                          // Explicit positive sign
+        assert_parsing(b"-7", PdfNumber::Integer(-7), b"");                                 // Explicit negative sign
 
-        assert_slice_and_value(b"-.1", PdfNumber::Real(-0.1));              // Leading point
-        assert_slice_and_value(b"+1111.1111", PdfNumber::Real(1111.1111));  // Embedded point
-        assert_slice_and_value(b"100.", PdfNumber::Real(100.));             // Trailing point
+        assert_parsing(b"-.1 ", PdfNumber::Real(-0.1), b" ");                               // Leading point
+        assert_parsing(b"+1111.1111%comment", PdfNumber::Real(1111.1111), b"%comment");     // Embedded point
+        assert_parsing(b"100.", PdfNumber::Real(100.), b"");                                     // Trailing point
 
         assert_err::<PdfNumber>(b"-");
         assert_err::<PdfNumber>(b"+");
