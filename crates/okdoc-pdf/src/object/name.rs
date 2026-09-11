@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{BufRead, ErrorKind::UnexpectedEof};
 use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::{error::PdfError, parseable::Parseable};
@@ -22,7 +22,7 @@ pub struct PdfName(pub Bytes);
 
 impl Parseable for PdfName {
     fn matches(_: &[u8]) -> usize {
-        todo!("decide if this function is still needed")
+        todo!()
     }
 
     fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
@@ -36,7 +36,7 @@ impl Parseable for PdfName {
             if chunk.len() == 0 {
                 return match state {
                     State::RegularChar => Ok(Self(value.freeze())),
-                    _ => Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into())),
+                    _ => Err(PdfError::Io(UnexpectedEof.into())),
                 }
             }
 

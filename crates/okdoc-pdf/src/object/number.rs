@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{BufRead, ErrorKind::UnexpectedEof};
 
 use crate::{error::PdfError, parseable::Parseable};
 
@@ -33,7 +33,7 @@ impl Default for PdfNumber {
 
 impl Parseable for PdfNumber {
     fn matches(_: &[u8]) -> usize {
-        todo!("decide if this function is still needed")
+        todo!()
     }
 
     fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
@@ -53,7 +53,7 @@ impl Parseable for PdfNumber {
                 return if met_digit {
                     Ok(value)
                 } else {
-                    Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()))
+                    Err(PdfError::Io(UnexpectedEof.into()))
                 }
             }
 

@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{BufRead, ErrorKind::UnexpectedEof};
 use crate::error::PdfError;
 
 
@@ -25,7 +25,7 @@ impl<T: BufRead> PdfInput for T {
             let chunk = self.fill_buf()?;
             let chunk_len = chunk.len();
             if chunk_len == 0 {
-                return Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()));
+                return Err(PdfError::Io(UnexpectedEof.into()));
             }
             
             let amt = chunk_len.min(kw_len - i);

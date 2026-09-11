@@ -1,4 +1,4 @@
-use std::io::{BufRead, ErrorKind};
+use std::io::{BufRead, ErrorKind::UnexpectedEof};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use memchr::{memchr, memchr3_iter};
@@ -47,7 +47,7 @@ impl PdfString {
         loop {
             let chunk = input.fill_buf()?;
             if chunk.len() == 0 {
-                return Err(PdfError::Io(ErrorKind::UnexpectedEof.into()));
+                return Err(PdfError::Io(UnexpectedEof.into()));
             }
             
             let mut i = 0;
@@ -149,12 +149,11 @@ impl PdfString {
             let chunk = input.fill_buf()?;
             let chunk_len = chunk.len();
             if chunk_len == 0 {
-                return Err(PdfError::Io(ErrorKind::UnexpectedEof.into()));
+                return Err(PdfError::Io(UnexpectedEof.into()));
             }
             
             let input_end = memchr(b'>', chunk).unwrap_or(chunk_len);
             
-            // parse hex
             let mut i = 0;
 
             if let Some(remaining_byte) = remaining_byte {
@@ -192,7 +191,7 @@ impl Parseable for PdfString {
     fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
         let chunk = input.fill_buf()?;
         if chunk.len() == 0 {
-            return Err(PdfError::Io(ErrorKind::UnexpectedEof.into()));
+            return Err(PdfError::Io(UnexpectedEof.into()));
         }
 
         let first_byte = chunk[0];
@@ -201,7 +200,6 @@ impl Parseable for PdfString {
         match first_byte {
             // Literal string
             b'(' => Self::parse_literal_from(input),
-            // WIP
             // Hex string
             b'<' => Self::parse_hex_from(input),
             _ => return Err(PdfError::Parse(format!("unexpected first character: {}", first_byte as char))),

@@ -1,4 +1,4 @@
-use std::io::{self, BufRead};
+use std::io::{BufRead, ErrorKind::UnexpectedEof};
 
 use crate::{error::PdfError, parseable::{Parseable, PdfInput}};
 
@@ -17,40 +17,29 @@ impl Parseable for PdfBoolean {
         //     }
         // }
 
-        todo!("decide if this function is still needed")
+        todo!()
     }
 
     fn parse_from<T: BufRead>(mut input: T) -> Result<Self, PdfError> {
         const KW_TRUE: &str = "true";
         const KW_FALSE: &str = "false";
         
-        let mut value = None;
-        
         let chunk = input.fill_buf()?;
         if chunk.len() == 0 {
-            return Err(PdfError::Io(io::ErrorKind::UnexpectedEof.into()));
+            return Err(PdfError::Io(UnexpectedEof.into()));
         }
 
-        if value.is_none() {
-            let first_char = chunk[0];
-            match first_char {
-                b't' => value = Some(true),
-                b'f' => value = Some(false),
-                _ => return Err(PdfError::Parse(format!("invalid first character for boolean: {}", first_char as char)))
-            }
+        let value;
+        let first_char = chunk[0];
+        match first_char {
+            b't' => value = true,
+            b'f' => value = false,
+            _ => return Err(PdfError::Parse(format!("invalid first character for boolean: {}", first_char as char)))
         }
 
-        match value {
-            Some(true) => {
-                input.read_keyword(KW_TRUE)?;
-                Ok(Self(true))
-            }
-            Some(false) => {
-                input.read_keyword(KW_FALSE)?;
-                Ok(Self(false))
-            }
-            _ => unreachable!(),
-        }
+        input.read_keyword(if value { KW_TRUE } else { KW_FALSE })?;
+
+        Ok(Self(value))
     }
 }
 
